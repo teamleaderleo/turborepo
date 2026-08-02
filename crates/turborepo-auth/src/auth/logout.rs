@@ -34,11 +34,6 @@ impl<T: TokenClient> LogoutOptions<T> {
         path: &AbsoluteSystemPath,
         invalidate: bool,
     ) -> Result<(), Error> {
-        // Read the existing content from the global configuration path
-        if path.read_to_string().is_err() {
-            return Ok(());
-        }
-
         if invalidate {
             match Token::from_file(path) {
                 Ok(token) => token.invalidate(&self.api_client).await?,
@@ -274,6 +269,24 @@ mod tests {
 
         let new_content = path.read_to_string().unwrap();
         assert_eq!(new_content, "{}");
+    }
+
+    #[tokio::test]
+    async fn test_remove_token_propagates_file_read_errors() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().to_path_buf())
+            .expect("could not create path");
+
+        let logout_options = LogoutOptions {
+            color_config: ColorConfig::new(false),
+            api_client: MockApiClient {
+                succeed_delete_request: true,
+            },
+            invalidate: false,
+            path: Some(path),
+        };
+
+        assert!(logout_options.remove_tokens().await.is_err());
     }
 
     #[tokio::test]
