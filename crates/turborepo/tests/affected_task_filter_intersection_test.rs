@@ -115,25 +115,13 @@ fn setup_task_level_filter_fixture(dir: &std::path::Path) {
     git(dir, &["checkout", "-b", "my-branch"]);
 }
 
-#[test]
-fn task_level_affected_intersects_package_filter() {
-    let tempdir = tempfile::tempdir().unwrap();
-    setup_task_level_filter_fixture(tempdir.path());
+fn dry_run(tempdir: &std::path::Path, filter: &str, parallel: bool) -> serde_json::Value {
+    let mut args = vec!["run", "test", "--affected", filter, "--dry=json"];
+    if parallel {
+        args.push("--parallel");
+    }
 
-    // A global dependency change marks both package tasks affected. The package
-    // selector must still authorize only beta as an executable entrypoint.
-    fs::write(tempdir.path().join("shared.txt"), "after\n").unwrap();
-
-    let output = run_turbo(
-        tempdir.path(),
-        &[
-            "run",
-            "test",
-            "--affected",
-            "--filter=beta",
-            "--dry=json",
-        ],
-    );
+    let output = run_turbo(tempdir, &args);
     assert!(
         output.status.success(),
         "dry run should succeed: {}",
@@ -141,19 +129,54 @@ fn task_level_affected_intersects_package_filter() {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .unwrap_or_else(|err| panic!("failed to parse dry-run JSON: {err}\nstdout: {stdout}"));
-    let task_ids: Vec<&str> = json["tasks"]
+    serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("failed to parse dry-run JSON: {err}\nstdout: {stdout}"))
+}
+
+fn task_ids(json: &serde_json::Value) -> Vec<&str> {
+    json["tasks"]
         .as_array()
         .expect("tasks array")
         .iter()
         .map(|task| task["taskId"].as_str().expect("taskId string"))
-        .collect();
+        .collect()
+}
 
+#[test]
+fn task_level_affected_intersects_package_filter() {
+    let tempdir = tempfile::tempdir().unwrap();
+    setup_task_level_filter_fixture(tempdir.path());
+
+    fs::write(tempdir.path().join("shared.txt"), "after\n").unwrap();
+
+    let json = dry_run(tempdir.path(), "--filter=beta", false);
     assert_eq!(
-        task_ids,
+        task_ids(&json),
         vec!["beta#test"],
         "package filter and task-input affectedness must intersect"
     );
     assert_eq!(json["packages"], serde_json::json!(["beta"]));
+}
+
+#[test]
+fn task_level_affected_intersects_package_filter_in_parallel_mode() {
+    let tempdir = tempfile::tempdir().unwrap();
+    setup_task_level_filter_fixture(tempdir.path());
+
+    fs::write(tempdir.path().join("shared.txt"), "after\n").unwrap();
+
+    let json = dry_run(tempdir.path(), "--filter=beta", true);
+    assert_eq!(task_ids(&json), vec!["beta#test"]);
+    assert_eq!(json["packages"], serde_json::json!(["beta"]));
+}
+
+#[test]
+fn task_level_affected_respects_exclude_only_filter() {
+    let tempdir = tempfile::tempdir().unwrap();
+    setup_task_level_filter_fixture(tempdir.path());
+
+    fs::write(tempdir.path().join("shared.txt"), "after\n").unwrap();
+
+    let json = dry_run(tempdir.path(), "--filter=!alpha", false);
+    assert_eq!(task_ids(&json), vec!["beta#test"]);
 }
