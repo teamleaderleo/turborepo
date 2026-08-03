@@ -290,6 +290,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_remove_missing_token_is_a_noop() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("missing.json"))
+            .expect("could not create path");
+
+        for invalidate in [false, true] {
+            let logout_options = LogoutOptions {
+                color_config: ColorConfig::new(false),
+                api_client: MockApiClient {
+                    succeed_delete_request: true,
+                },
+                invalidate,
+                path: Some(path.clone()),
+            };
+
+            logout_options.remove_tokens().await.unwrap();
+            assert!(!path.exists());
+        }
+    }
+
+    #[tokio::test]
     async fn test_remove_tokens_clears_legacy_and_turbo_auth_files() {
         let turbo_dir = tempdir().expect("Failed to create turbo dir");
         let vercel_dir = tempdir().expect("Failed to create vercel dir");
