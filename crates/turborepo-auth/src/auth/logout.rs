@@ -29,6 +29,13 @@ impl<T: TokenClient> LogoutOptions<T> {
         }
     }
 
+    fn tokens_match(first: Option<&SecretString>, second: Option<&SecretString>) -> bool {
+        matches!(
+            (first, second),
+            (Some(first), Some(second)) if first.expose() == second.expose()
+        )
+    }
+
     async fn try_remove_token(
         &self,
         path: &AbsoluteSystemPath,
@@ -81,17 +88,14 @@ impl<T: TokenClient> LogoutOptions<T> {
                 .transpose()?
                 .flatten();
 
-            let skip_config_invalidate = matches!(
-                (turbo_auth_token.as_ref(), turbo_config_token.as_ref()),
-                (Some(auth_token), Some(config_token)) if auth_token.expose() == config_token.expose()
+            let skip_config_invalidate = Self::tokens_match(
+                turbo_auth_token.as_ref(),
+                turbo_config_token.as_ref(),
             );
-            let skip_legacy_invalidate = matches!(
-                (
-                    turbo_auth_token.as_ref().or(turbo_config_token.as_ref()),
-                    legacy_token.as_ref(),
-                ),
-                (Some(turbo_token), Some(legacy_token)) if turbo_token.expose() == legacy_token.expose()
-            );
+            let skip_legacy_invalidate = Self::tokens_match(
+                turbo_auth_token.as_ref(),
+                legacy_token.as_ref(),
+            ) || Self::tokens_match(turbo_config_token.as_ref(), legacy_token.as_ref());
 
             (skip_config_invalidate, skip_legacy_invalidate)
         } else {
@@ -211,6 +215,22 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn test_token_match_checks_each_previous_store() {
+        let auth_token = SecretString::new("auth-token".to_string());
+        let config_token = SecretString::new("config-token".to_string());
+        let legacy_token = SecretString::new("config-token".to_string());
+
+        assert!(!LogoutOptions::<MockApiClient>::tokens_match(
+            Some(&auth_token),
+            Some(&legacy_token),
+        ));
+        assert!(LogoutOptions::<MockApiClient>::tokens_match(
+            Some(&config_token),
+            Some(&legacy_token),
+        ));
     }
 
     #[tokio::test]
