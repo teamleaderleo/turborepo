@@ -24,9 +24,16 @@ impl<T: TokenClient> LogoutOptions<T> {
     fn token_at_path(path: &AbsoluteSystemPath) -> Result<Option<SecretString>, Error> {
         match Token::from_file(path) {
             Ok(token) => Ok(Some(token.into_inner().clone())),
-            Err(Error::TokenNotFound) => Ok(None),
+            Err(Error::TokenNotFound | Error::InvalidTokenFileFormat { .. }) => Ok(None),
             Err(err) => Err(err),
         }
+    }
+
+    fn tokens_match(first: Option<&SecretString>, second: Option<&SecretString>) -> bool {
+        matches!(
+            (first, second),
+            (Some(first), Some(second)) if first.expose() == second.expose()
+        )
     }
 
     async fn try_remove_token(
@@ -34,11 +41,6 @@ impl<T: TokenClient> LogoutOptions<T> {
         path: &AbsoluteSystemPath,
         invalidate: bool,
     ) -> Result<(), Error> {
-        // Read the existing content from the global configuration path
-        if path.read_to_string().is_err() {
-            return Ok(());
-        }
-
         if invalidate {
             match Token::from_file(path) {
                 Ok(token) => token.invalidate(&self.api_client).await?,
@@ -86,17 +88,14 @@ impl<T: TokenClient> LogoutOptions<T> {
                 .transpose()?
                 .flatten();
 
-            let skip_config_invalidate = matches!(
-                (turbo_auth_token.as_ref(), turbo_config_token.as_ref()),
-                (Some(auth_token), Some(config_token)) if auth_token.expose() == config_token.expose()
+            let skip_config_invalidate = Self::tokens_match(
+                turbo_auth_token.as_ref(),
+                turbo_config_token.as_ref(),
             );
-            let skip_legacy_invalidate = matches!(
-                (
-                    turbo_auth_token.as_ref().or(turbo_config_token.as_ref()),
-                    legacy_token.as_ref(),
-                ),
-                (Some(turbo_token), Some(legacy_token)) if turbo_token.expose() == legacy_token.expose()
-            );
+            let skip_legacy_invalidate = Self::tokens_match(
+                turbo_auth_token.as_ref(),
+                legacy_token.as_ref(),
+            ) || Self::tokens_match(turbo_config_token.as_ref(), legacy_token.as_ref());
 
             (skip_config_invalidate, skip_legacy_invalidate)
         } else {
@@ -203,6 +202,37 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_token_at_path_treats_malformed_file_as_missing() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("config.json"))
+            .expect("could not create path");
+        path.create_with_contents("{not-json")
+            .expect("could not create malformed file");
+
+        assert!(
+            LogoutOptions::<MockApiClient>::token_at_path(&path)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_token_match_checks_each_previous_store() {
+        let auth_token = SecretString::new("auth-token".to_string());
+        let config_token = SecretString::new("config-token".to_string());
+        let legacy_token = SecretString::new("config-token".to_string());
+
+        assert!(!LogoutOptions::<MockApiClient>::tokens_match(
+            Some(&auth_token),
+            Some(&legacy_token),
+        ));
+        assert!(LogoutOptions::<MockApiClient>::tokens_match(
+            Some(&config_token),
+            Some(&legacy_token),
+        ));
+    }
+
     #[tokio::test]
     async fn test_remove_token() {
         let tmp_dir = tempdir().unwrap();
@@ -274,6 +304,45 @@ mod tests {
 
         let new_content = path.read_to_string().unwrap();
         assert_eq!(new_content, "{}");
+    }
+
+    #[tokio::test]
+    async fn test_remove_token_propagates_file_read_errors() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().to_path_buf())
+            .expect("could not create path");
+
+        let logout_options = LogoutOptions {
+            color_config: ColorConfig::new(false),
+            api_client: MockApiClient {
+                succeed_delete_request: true,
+            },
+            invalidate: false,
+            path: Some(path),
+        };
+
+        assert!(logout_options.remove_tokens().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_remove_missing_token_is_a_noop() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("missing.json"))
+            .expect("could not create path");
+
+        for invalidate in [false, true] {
+            let logout_options = LogoutOptions {
+                color_config: ColorConfig::new(false),
+                api_client: MockApiClient {
+                    succeed_delete_request: true,
+                },
+                invalidate,
+                path: Some(path.clone()),
+            };
+
+            logout_options.remove_tokens().await.unwrap();
+            assert!(!path.exists());
+        }
     }
 
     #[tokio::test]
