@@ -27,13 +27,9 @@ fn setup_dependency_closure_fixture(dir: &std::path::Path) {
   "$schema": "https://turborepo.com/schema.json",
   "globalDependencies": ["shared.txt"],
   "tasks": {
-    "build": {
-      "cache": false,
-      "inputs": ["$TURBO_DEFAULT$"]
-    },
     "test": {
       "cache": false,
-      "dependsOn": ["^build"],
+      "dependsOn": ["^test"],
       "inputs": ["$TURBO_DEFAULT$"]
     }
   },
@@ -51,7 +47,6 @@ fn setup_dependency_closure_fixture(dir: &std::path::Path) {
   "name": "alpha",
   "version": "1.0.0",
   "scripts": {
-    "build": "node -e \"console.log('alpha build')\"",
     "test": "node -e \"console.log('alpha test')\""
   }
 }
@@ -128,13 +123,13 @@ fn setup_dependency_closure_fixture(dir: &std::path::Path) {
 }
 
 #[test]
-fn task_level_filter_keeps_required_dependency_tasks() {
+fn task_level_filter_keeps_same_name_dependency_tasks() {
     let tempdir = tempfile::tempdir().unwrap();
     setup_dependency_closure_fixture(tempdir.path());
 
-    // The global dependency change affects alpha#test and beta#test. Filtering
-    // to beta must remove alpha#test while retaining alpha#build because
-    // beta#test requires that dependency task.
+    // The global dependency change affects both test entrypoints. Filtering to
+    // beta must treat beta#test as the selected root while retaining alpha#test
+    // because the selected task requires it through ^test.
     fs::write(tempdir.path().join("shared.txt"), "after\n").unwrap();
 
     let output = run_turbo(
@@ -166,8 +161,8 @@ fn task_level_filter_keeps_required_dependency_tasks() {
 
     assert_eq!(
         task_ids,
-        vec!["alpha#build", "beta#test"],
-        "filtering must keep required dependency closure without authorizing alpha#test"
+        vec!["alpha#test", "beta#test"],
+        "selected roots and required same-name dependencies must remain distinct"
     );
     assert_eq!(json["packages"], serde_json::json!(["beta"]));
 }
