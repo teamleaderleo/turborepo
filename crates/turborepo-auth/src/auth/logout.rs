@@ -330,7 +330,7 @@ mod tests {
         let turbo_dir = tempdir().expect("Failed to create turbo dir");
         let vercel_dir = tempdir().expect("Failed to create vercel dir");
         let turbo_path =
-            AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("turborepo/config.json"))
+            AbsoluteSystemPathBuf::try_from(turbo_dir.path().join("turborepo/config.json"))
                 .expect("could not create turbo path");
         let legacy_path =
             AbsoluteSystemPathBuf::try_from(vercel_dir.path().join("com.vercel.cli/auth.json"))
