@@ -24,7 +24,7 @@ impl<T: TokenClient> LogoutOptions<T> {
     fn token_at_path(path: &AbsoluteSystemPath) -> Result<Option<SecretString>, Error> {
         match Token::from_file(path) {
             Ok(token) => Ok(Some(token.into_inner().clone())),
-            Err(Error::TokenNotFound) => Ok(None),
+            Err(Error::TokenNotFound | Error::InvalidTokenFileFormat { .. }) => Ok(None),
             Err(err) => Err(err),
         }
     }
@@ -198,6 +198,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_token_at_path_treats_malformed_file_as_missing() {
+        let tmp_dir = tempdir().unwrap();
+        let path = AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("config.json"))
+            .expect("could not create path");
+        path.create_with_contents("{not-json")
+            .expect("could not create malformed file");
+
+        assert!(
+            LogoutOptions::<MockApiClient>::token_at_path(&path)
+                .unwrap()
+                .is_none()
+        );
+    }
+
     #[tokio::test]
     async fn test_remove_token() {
         let tmp_dir = tempdir().unwrap();
@@ -315,7 +330,7 @@ mod tests {
         let turbo_dir = tempdir().expect("Failed to create turbo dir");
         let vercel_dir = tempdir().expect("Failed to create vercel dir");
         let turbo_path =
-            AbsoluteSystemPathBuf::try_from(turbo_dir.path().join("turborepo/config.json"))
+            AbsoluteSystemPathBuf::try_from(tmp_dir.path().join("turborepo/config.json"))
                 .expect("could not create turbo path");
         let legacy_path =
             AbsoluteSystemPathBuf::try_from(vercel_dir.path().join("com.vercel.cli/auth.json"))
