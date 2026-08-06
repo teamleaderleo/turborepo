@@ -169,7 +169,8 @@ fn assert_package_task_contract(json: &serde_json::Value) {
     assert_eq!(
         task_ids,
         vec!["alpha#build", "beta#test"],
-        "the package filter scopes the unqualified task without dropping the explicitly requested package task"
+        "the package filter scopes the unqualified task without dropping the explicitly requested \
+         package task"
     );
     assert_eq!(json["packages"], serde_json::json!(["beta"]));
 }
