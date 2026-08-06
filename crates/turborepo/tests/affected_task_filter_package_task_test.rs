@@ -190,13 +190,22 @@ fn assert_package_task_contract(json: &serde_json::Value) {
         .collect();
     task_ids.sort_unstable();
 
+    eprintln!(
+        "ROUND004_RESULT packages={} tasks={task_ids:?}",
+        json["packages"]
+    );
+
     assert_eq!(
         task_ids,
         vec!["alpha#build", "beta#test"],
-        "the package filter scopes the unqualified task without dropping the explicitly requested \
-         package task"
+        "unexpected executable task set; packages={}",
+        json["packages"]
     );
-    assert_eq!(json["packages"], serde_json::json!(["beta"]));
+    assert_eq!(
+        json["packages"],
+        serde_json::json!(["beta"]),
+        "unexpected reported packages; tasks={task_ids:?}"
+    );
 }
 
 #[test]
