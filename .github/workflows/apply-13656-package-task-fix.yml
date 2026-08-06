@@ -58,12 +58,7 @@ jobs:
                     .iter()
                     .map(|task| PackageName::from(task.package()))
                     .collect();
-                affected_entrypoints.extend(
-                    always_include
-                        .iter()
-                        .filter(|task| engine.task_definition(task).is_some())
-                        .cloned(),
-                );
+                affected_entrypoints.extend(always_include.iter().cloned());
                 let affected_entrypoints =
                     super::task_filter::expand_with_siblings(&engine, affected_entrypoints);''',
                   "successful affected path",
@@ -73,12 +68,7 @@ jobs:
                 let scoped_tasks = super::task_filter::expand_with_siblings(&engine, scoped_tasks);
                 Ok((engine.retain_filtered_tasks(&scoped_tasks), None))''',
                   '''                let mut scoped_tasks = engine.task_ids_for_packages(package_scope);
-                scoped_tasks.extend(
-                    always_include
-                        .iter()
-                        .filter(|task| engine.task_definition(task).is_some())
-                        .cloned(),
-                );
+                scoped_tasks.extend(always_include.iter().cloned());
                 let scoped_tasks = super::task_filter::expand_with_siblings(&engine, scoped_tasks);
                 Ok((engine.retain_filtered_tasks(&scoped_tasks), None))''',
                   "fail-open affected path",
