@@ -118,13 +118,7 @@ fn task_ids(tempdir: &std::path::Path) -> Vec<String> {
 
     let output = run_turbo(
         tempdir,
-        &[
-            "run",
-            "test",
-            "--affected",
-            "--filter=beta",
-            "--dry=json",
-        ],
+        &["run", "test", "--affected", "--filter=beta", "--dry=json"],
     );
     assert!(
         output.status.success(),
