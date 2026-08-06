@@ -55,5 +55,11 @@ jobs:
       - name: Run entrypoint-policy controls
         run: cargo test --locked -p turbo --test affected_task_filter_legacy_entrypoint_test -- --nocapture
 
-      - name: Compare package-task authority across affected paths
-        run: cargo test --locked -p turbo --test affected_task_filter_package_task_test -- --nocapture
+      - name: Verify combined task-filter package-task authority
+        run: cargo test --locked -p turbo --test affected_task_filter_package_task_test combined_task_filter_preserves_package_qualified_task -- --exact --nocapture
+
+      - name: Verify task-input affected package-task authority
+        run: cargo test --locked -p turbo --test affected_task_filter_package_task_test task_input_affected_preserves_package_qualified_task -- --exact --nocapture
+
+      - name: Verify task-input affected fail-open package-task authority
+        run: cargo test --locked -p turbo --test affected_task_filter_package_task_test task_input_affected_fail_open_preserves_package_qualified_task -- --exact --nocapture
