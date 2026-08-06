@@ -4,7 +4,7 @@ mod common;
 
 use std::fs;
 
-use common::{git, run_turbo};
+use common::{git, run_turbo, run_turbo_with_env};
 
 fn setup_package_task_fixture(dir: &std::path::Path, filter_using_tasks: bool) {
     fs::create_dir_all(dir.join("packages/alpha")).unwrap();
@@ -157,6 +157,30 @@ fn package_task_dry_run(dir: &std::path::Path) -> serde_json::Value {
         .unwrap_or_else(|err| panic!("failed to parse dry-run JSON: {err}\nstdout: {stdout}"))
 }
 
+fn package_task_fail_open_dry_run(dir: &std::path::Path) -> serde_json::Value {
+    let output = run_turbo_with_env(
+        dir,
+        &[
+            "run",
+            "test",
+            "alpha#build",
+            "--affected",
+            "--filter=beta",
+            "--dry=json",
+        ],
+        &[("TURBO_SCM_BASE", "definitely-missing-round-004-ref")],
+    );
+    assert!(
+        output.status.success(),
+        "fail-open dry run should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("failed to parse fail-open JSON: {err}\nstdout: {stdout}"))
+}
+
 fn assert_package_task_contract(json: &serde_json::Value) {
     let mut task_ids: Vec<&str> = json["tasks"]
         .as_array()
@@ -189,4 +213,12 @@ fn task_input_affected_preserves_package_qualified_task() {
     setup_package_task_fixture(tempdir.path(), false);
 
     assert_package_task_contract(&package_task_dry_run(tempdir.path()));
+}
+
+#[test]
+fn task_input_affected_fail_open_preserves_package_qualified_task() {
+    let tempdir = tempfile::tempdir().unwrap();
+    setup_package_task_fixture(tempdir.path(), false);
+
+    assert_package_task_contract(&package_task_fail_open_dry_run(tempdir.path()));
 }
