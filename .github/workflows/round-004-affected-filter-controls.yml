@@ -94,4 +94,13 @@ jobs:
         uses: ./.github/actions/setup-capnproto
 
       - name: Run exact package-task control
-        run: cargo test --locked -p turbo --test affected_task_filter_package_task_test "${{ matrix.test }}" -- --nocapture
+        shell: bash
+        run: |
+          set +e
+          cargo test --quiet --locked -p turbo \
+            --test affected_task_filter_package_task_test \
+            "${{ matrix.test }}" -- --nocapture > /tmp/round-004-package-task.log 2>&1
+          status=$?
+          grep 'ROUND004_RESULT' /tmp/round-004-package-task.log || true
+          tail -n 80 /tmp/round-004-package-task.log
+          exit "$status"
