@@ -131,13 +131,7 @@ fn task_level_filter_keeps_same_name_dependency_tasks() {
 
     let output = run_turbo(
         tempdir.path(),
-        &[
-            "run",
-            "test",
-            "--affected",
-            "--filter=beta",
-            "--dry=json",
-        ],
+        &["run", "test", "--affected", "--filter=beta", "--dry=json"],
     );
     assert!(
         output.status.success(),
